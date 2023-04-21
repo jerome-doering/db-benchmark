@@ -1,0 +1,40 @@
+version: "3.7"
+
+services:
+
+  mongo:
+    image: mongo:4
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: benchmark
+      MONGO_INITDB_ROOT_PASSWORD: benchmark
+      MONGO_INITDB_DATABASE: benchmark
+    ports: ["27017:27017"]
+    volumes:
+      - mongodb:/data/db
+      - ./mongo.init.js:/docker-entrypoint-initdb.d/init.js
+
+  mariadb:
+    image: mariadb:10.6
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: test
+    ports: ["3306:3306"]
+    volumes:
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+      - maria:/var/lib/mysql
+
+  postgres:
+    image: postgres:13-alpine
+    environment:
+      POSTGRES_PASSWORD: benchmark
+      POSTGRES_DB: benchmark
+      POSTGRES_USER: benchmark
+    ports: ["15432:5432"]
+    volumes:
+      - pgsql:/var/lib/postgresql/data
+      - ./pgsql.init.sql:/docker-entrypoint-initdb.d/init.sql
+
+volumes:
+  maria:
+  pgsql:
+  mongodb:
