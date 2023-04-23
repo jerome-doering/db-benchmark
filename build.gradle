@@ -1,5 +1,9 @@
 plugins {
     id 'java'
+    id 'eclipse'
+    id 'com.github.johnrengelman.shadow' version '8.1.1'
+    id 'me.champeau.jmh' version '0.7.1'
+    id 'io.freefair.lombok' version '8.0.1'
 }
 
 group = 'org.example'
@@ -15,11 +19,10 @@ dependencies {
     implementation 'org.mariadb.jdbc:mariadb-java-client:+'
     implementation 'org.mongodb:mongodb-driver-sync:+'
     implementation 'com.fasterxml.jackson.core:jackson-databind:2.14.2'
-
-    testImplementation platform('org.junit:junit-bom:5.9.1')
-    testImplementation 'org.junit.jupiter:junit-jupiter'
+    implementation 'ch.qos.logback:logback-classic:1.4.7'
 }
 
-test {
-    useJUnitPlatform()
+jmh {
+   includes = ['PostgresRunner', 'MariaRunner', 'MongoRunner']
+//includes = ['MongoRunner']
 }
