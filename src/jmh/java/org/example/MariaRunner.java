@@ -21,7 +21,7 @@ import org.openjdk.jmh.infra.Blackhole;
 public class MariaRunner extends BenchmarkBaseline<Connection> {
 
   @State(Scope.Thread)
-  public static class MariaReadState {
+  public static class MariaReadState extends RandomCheckIdHolder {
     PreparedStatement statement;
 
     @Setup(Level.Invocation)
@@ -33,8 +33,8 @@ public class MariaRunner extends BenchmarkBaseline<Connection> {
         JOIN lookup_identifier l2 on l1.id = l2.id
         WHERE l2.name = 'CHECK_ID' AND value = ?""";
       this.statement = runner.database.prepareStatement(query);
-      long randomId = runner.getRandomCheckId();
-      this.statement.setLong(1, randomId);
+      this.randomCheckId = runner.getRandomCheckId();
+      this.statement.setLong(1, randomCheckId);
     }
 
     @TearDown(Level.Invocation)
@@ -48,7 +48,9 @@ public class MariaRunner extends BenchmarkBaseline<Connection> {
   @SneakyThrows
   public void benchmarkRead(MariaReadState state, Blackhole bl) {
     ResultSet rs = state.statement.executeQuery();
-    if (!rs.next() || rs.getString("id") == null) {
+    rs.next();
+    rs.getLong("value");
+    if (rs.getLong("value") != state.randomCheckId) {
       throw new IllegalStateException("Record not found!");
     }
     bl.consume(rs);

@@ -104,4 +104,8 @@ public abstract class BenchmarkBaseline<T extends AutoCloseable> extends Databas
     LOG.info("Database closed");
   }
 
+  public static class RandomCheckIdHolder {
+    long randomCheckId;
+  }
+
 }

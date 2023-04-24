@@ -23,7 +23,7 @@ public class PostgresRunner extends BenchmarkBaseline<Connection> {
   private final ObjectMapper objectMapper = new ObjectMapper();
 
   @State(Scope.Thread)
-  public static class MariaReadState {
+  public static class MariaReadState extends RandomCheckIdHolder {
     PreparedStatement statement;
 
     @Setup(Level.Invocation)
@@ -34,8 +34,8 @@ public class PostgresRunner extends BenchmarkBaseline<Connection> {
         FROM lookup
         WHERE identifiers->>'CHECK_ID' = ?""";
       this.statement = runner.database.prepareStatement(query);
-      long randomId = runner.getRandomCheckId();
-      this.statement.setString(1, String.valueOf(randomId));
+      this.randomCheckId = runner.getRandomCheckId();
+      this.statement.setString(1, String.valueOf(randomCheckId));
     }
 
     @TearDown(Level.Invocation)
@@ -49,8 +49,10 @@ public class PostgresRunner extends BenchmarkBaseline<Connection> {
   @SneakyThrows
   public void benchmarkRead(MariaReadState state, Blackhole bl) {
     ResultSet rs = state.statement.executeQuery();
-    if (!rs.next() || rs.getString("id") == null) {
-      throw new IllegalStateException("Record not found!");
+    rs.next();
+    long checkId = objectMapper.readTree(rs.getString("identifiers")).get("CHECK_ID").asLong();
+    if (checkId != state.randomCheckId) {
+      throw new IllegalStateException();
     }
     bl.consume(rs);
     rs.close(); // Should that be part of the benchmark?

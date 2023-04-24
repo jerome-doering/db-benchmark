@@ -5,6 +5,7 @@ import ch.qos.logback.classic.LoggerContext;
 import com.mongodb.client.MongoClient;
 import com.mongodb.client.MongoClients;
 import com.mongodb.client.MongoCollection;
+import com.mongodb.client.MongoCursor;
 import java.util.List;
 import org.bson.Document;
 import org.openjdk.jmh.annotations.Benchmark;
@@ -18,29 +19,35 @@ import org.slf4j.LoggerFactory;
 public class MongoRunner extends BenchmarkBaseline<MongoClient> {
 
   @State(Scope.Thread)
-  public static class MongoLookupReadState {
+  public static class MongoLookupReadState extends RandomCheckIdHolder {
     Document query;
     MongoCollection<Document> mongoCollection;
 
     @Setup(Level.Invocation)
     public void setup(MongoRunner runner) {
       this.mongoCollection = runner.getCollection();
+      this.randomCheckId = runner.getRandomCheckId();
       this.query = new Document();
-      long randomId = runner.getRandomCheckId();
-      this.query.put("identifiers.CHECK_ID", randomId);
+      this.query.put("identifiers.CHECK_ID", randomCheckId);
     }
   }
 
   @Benchmark
   public void benchmarkRead(MongoLookupReadState state, Blackhole bl) {
-    bl.consume(state.mongoCollection.find(state.query).cursor().next());
+    MongoCursor<Document> cursor = state.mongoCollection.find(state.query).cursor();
+    Document next = cursor.next();
+    if (next.get("identifiers", Document.class).getLong("CHECK_ID") != state.randomCheckId) {
+      throw new IllegalStateException();
+    }
+    bl.consume(next);
+    cursor.close();
   }
 
   @Override
   protected MongoClient createDatabaseConnection() {
     LoggerContext loggerContext = (LoggerContext) LoggerFactory.getILoggerFactory();
     Logger rootLogger = loggerContext.getLogger("org.mongodb.driver");
-    rootLogger.setLevel(ch.qos.logback.classic.Level.WARN);
+    rootLogger.setLevel(ch.qos.logback.classic.Level.ERROR); // hide some mongo warnings
     MongoClient mongo = MongoClients.create(
       "mongodb://benchmark:benchmark@localhost:27017/?keepAlive=true&poolSize=30&autoReconnect=true&socketTimeoutMS=360000&connectTimeoutMS=360000");
     mongo.listDatabases();
