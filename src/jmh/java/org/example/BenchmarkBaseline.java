@@ -25,8 +25,8 @@ import org.slf4j.LoggerFactory;
  *
  * @param <T> The database-type. Should be initiated <b>once<b>.
  */
-@Warmup(iterations = 1, time = 5)
-@Measurement(iterations = 1, time = 60)
+@Warmup(iterations = 1, time = 10)
+@Measurement(iterations = 1, time = 90)
 @BenchmarkMode(Mode.AverageTime)
 @OutputTimeUnit(TimeUnit.MILLISECONDS)
 @State(Scope.Benchmark)
@@ -37,7 +37,7 @@ public abstract class BenchmarkBaseline<T extends AutoCloseable> extends Databas
 
   protected T database;
 
-  @Param({"50", "1000", "5000", "10000", "50000", "100000", "250000", "500000", "1000000"})
+  @Param({"50", "1000" , "5000", "10000", "50000", "100000", "250000", "500000", "1000000", "5000000", "10000000"})
   public int documentCount;
 
   /**
