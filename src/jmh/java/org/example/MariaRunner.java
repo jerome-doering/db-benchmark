@@ -101,13 +101,21 @@ public class MariaRunner extends BenchmarkBaseline<Connection> {
   @Override
   @SneakyThrows
   protected void truncate() {
-    try (var statementOne =
-      database.prepareStatement("TRUNCATE TABLE lookup")) {
-      statementOne.execute();
-    }
-    try (var statementOne =
-      database.prepareStatement("TRUNCATE TABLE lookup_identifier")) {
-      statementOne.execute();
+      executecmd("TRUNCATE TABLE lookup");
+      executecmd("TRUNCATE TABLE lookup_identifier");
+  }
+
+  @Override
+  protected void rebuildIndex() {
+    executecmd("OPTIMIZE TABLE lookup");
+    executecmd("OPTIMIZE TABLE lookup_identifier");
+  }
+
+  @SneakyThrows
+  private void executecmd(String query) {
+    try (var statement =
+      database.prepareStatement(query)) {
+      statement.execute();
     }
   }
 

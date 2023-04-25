@@ -6,6 +6,7 @@ import com.mongodb.client.MongoClient;
 import com.mongodb.client.MongoClients;
 import com.mongodb.client.MongoCollection;
 import com.mongodb.client.MongoCursor;
+import java.util.LinkedList;
 import java.util.List;
 import org.bson.Document;
 import org.openjdk.jmh.annotations.Benchmark;
@@ -51,13 +52,27 @@ public class MongoRunner extends BenchmarkBaseline<MongoClient> {
     MongoClient mongo = MongoClients.create(
       "mongodb://benchmark:benchmark@localhost:27017/?keepAlive=true&poolSize=30&autoReconnect=true&socketTimeoutMS=360000&connectTimeoutMS=360000");
     mongo.listDatabases();
-
     return mongo;
   }
 
   @Override
   protected void truncate() {
     getCollection().deleteMany(new Document());
+  }
+
+  @Override
+  protected void rebuildIndex() {
+    List<Document> indexes = new LinkedList<>();
+    MongoCollection<Document> collection = getCollection();
+    collection.listIndexes().cursor().forEachRemaining(d -> {
+      if (!d.getString("name").equals("_id_")) {
+        indexes.add(d);
+      }
+    });
+    indexes.stream()
+      .map(d -> d.getString("name"))
+      .forEach(collection::dropIndex);
+    indexes.forEach(collection::createIndex);
   }
 
   @Override

@@ -2,7 +2,14 @@ package org.example;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.IntStream;
+import java.util.stream.Stream;
+import lombok.SneakyThrows;
 import org.openjdk.jmh.annotations.BenchmarkMode;
 import org.openjdk.jmh.annotations.Fork;
 import org.openjdk.jmh.annotations.Level;
@@ -25,19 +32,23 @@ import org.slf4j.LoggerFactory;
  *
  * @param <T> The database-type. Should be initiated <b>once<b>.
  */
-@Warmup(iterations = 1, time = 10)
-@Measurement(iterations = 1, time = 90)
+@Warmup(iterations = 1, time = 25)
+@Measurement(iterations = 1, time = 60)
 @BenchmarkMode(Mode.AverageTime)
 @OutputTimeUnit(TimeUnit.MILLISECONDS)
 @State(Scope.Benchmark)
 @Fork(value = 1)
 public abstract class BenchmarkBaseline<T extends AutoCloseable> extends DatabaseRecordsGenerator {
   private static final Logger LOG = LoggerFactory.getLogger(BenchmarkBaseline.class);
-  private static final int BULK_SIZE = 500;
+  private static final int BULK_SIZE = 1000;
+  private static final int THREADS_TO_FILL_DB = 4;
+  private final AtomicInteger numberOfInserts = new AtomicInteger(0);
+  BlockingQueue<List<Lookup>> unboundedQueue = new ArrayBlockingQueue<>(THREADS_TO_FILL_DB, true);
 
   protected T database;
 
-  @Param({"50", "1000" , "5000", "10000", "50000", "100000", "250000", "500000", "1000000", "5000000", "10000000"})
+//  @Param({"50", "1000", "5000", "10000", "50000", "100000", "250000", "500000", "1000000", "5000000", "10000000"})
+   @Param({"500000", "1000000", "5000000", "10000000"})
   public int documentCount;
 
   /**
@@ -59,36 +70,78 @@ public abstract class BenchmarkBaseline<T extends AutoCloseable> extends Databas
    */
   protected abstract void truncate();
 
+  /**
+   * Rebuilds all indexes because with more execution cycles the and {@link #truncate()} the index can become bloated.
+   */
+  protected abstract void rebuildIndex();
+
   @Setup(Level.Trial)
   public void setup() {
     this.database = createDatabaseConnection();
 
     truncate();
+    rebuildIndex(); // for faster inserts
     fillDatabase();
+    LOG.info("Rebuilding indexes ...");
+    rebuildIndex(); // for faster queries
+    LOG.info("{}/{} elements inserted. Database created", numberOfInserts.get(), documentCount);
 
     cleanupResources();
-    LOG.info("Database created");
   }
 
+  @SneakyThrows
   private void fillDatabase() {
-    List<Lookup> records = new ArrayList<>(BULK_SIZE);
-    for (int i = 0; i < documentCount; ++i) {
-      Lookup lookup = generateRecord();
-      records.add(lookup);
+    CompletableFuture<Void> producerThread = CompletableFuture.runAsync(this::generateLookups);
+    Stream<CompletableFuture<Void>> consumerThreads = IntStream.range(0, THREADS_TO_FILL_DB)
+      .boxed()
+      .map(cnt -> CompletableFuture.runAsync(this::pullAndInsert));
 
-      if (records.size() == BULK_SIZE) {
-        insertDocuments(records);
-        records.clear();
+    @SuppressWarnings("unchecked")
+    CompletableFuture<Void>[] threads = Stream.concat(Stream.of(producerThread), consumerThreads)
+      .toArray(CompletableFuture[]::new);
+
+    CompletableFuture.allOf(threads).join();
+  }
+
+  @SneakyThrows
+  private void pullAndInsert() {
+    LOG.info("Consumer thread for db inserts started.....");
+    while (numberOfInserts.get() < documentCount - 1) {
+      List<Lookup> batch = unboundedQueue.poll(1, TimeUnit.SECONDS);
+      if (batch == null) {
+        LOG.info("Waiting {}/{} .....", numberOfInserts.get(), documentCount);
+        continue;
       }
+      insertDocuments(batch);
+      int nrBeforeUpdate = numberOfInserts.getAndAdd(batch.size());
+      int progressNumber = Math.max(50, documentCount / 100);
 
-      if (i % Math.max(50, documentCount / 100) == 0) {
-        LOG.info("{}/{} elements inserted in DB.", i, documentCount);
+      // Could me made smarter
+      for (int i = nrBeforeUpdate; i < nrBeforeUpdate + batch.size(); i++) {
+        if (i > 0 && i % progressNumber == 0) {
+          LOG.info("{}/{} elements inserted in DB.", i, documentCount);
+        }
+      }
+    }
+    LOG.info("Consumer thread for db inserts finished.....");
+  }
+
+  @SneakyThrows
+  private void generateLookups() {
+    LOG.info("Producer thread for lookups started.....");
+    List<Lookup> records = new ArrayList<>(BULK_SIZE);
+    for (int i = 1; i <= documentCount; ++i) {
+      records.add(generateRecord());
+
+      if (i % BULK_SIZE == 0) {
+        unboundedQueue.put(records);
+        records = new ArrayList<>(BULK_SIZE);
       }
     }
     if (!records.isEmpty()) {
-      insertDocuments(records);
-      records.clear();
+      unboundedQueue.put(records);
     }
+    LOG.info("Producer thread for lookups finished.....");
   }
 
   private void cleanupResources() {
@@ -102,6 +155,8 @@ public abstract class BenchmarkBaseline<T extends AutoCloseable> extends Databas
     database.close();
     // Maybe log stats of the databases (table/index)?
     LOG.info("Database closed");
+    cleanupResources();
+    uniqueCheckIdsList.clear();
   }
 
   public static class RandomCheckIdHolder {

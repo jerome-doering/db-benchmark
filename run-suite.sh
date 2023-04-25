@@ -30,7 +30,7 @@ until [ $(docker-compose logs --tail='all' mariadb  | grep "ready for connection
 	printf '.'
     sleep 1
 done
-
+sleep 1
 java -jar build/libs/db-benchmark-1.0-SNAPSHOT-jmh.jar MariaRunner  -rff "build/maria.csv" -o "build/maria.txt"
 
 docker-compose down

@@ -30,12 +30,11 @@ public class PostgresRunner extends BenchmarkBaseline<Connection> {
     @SneakyThrows
     public void setup(PostgresRunner runner) {
       String query = """
-        SELECT *
-        FROM lookup
-        WHERE identifiers->>'CHECK_ID' = ?""";
+        SELECT * FROM lookup WHERE identifiers @> ?::jsonb
+        """;
       this.statement = runner.database.prepareStatement(query);
       this.randomCheckId = runner.getRandomCheckId();
-      this.statement.setString(1, String.valueOf(randomCheckId));
+      this.statement.setString(1, String.format("{\"CHECK_ID\": %d}", randomCheckId));
     }
 
     @TearDown(Level.Invocation)
@@ -83,9 +82,19 @@ public class PostgresRunner extends BenchmarkBaseline<Connection> {
   @Override
   @SneakyThrows
   protected void truncate() {
-    try (var statementOne =
-      database.prepareStatement("TRUNCATE TABLE lookup")) {
-      statementOne.execute();
+    executecmd("TRUNCATE TABLE lookup");
+  }
+
+  @Override
+  protected void rebuildIndex() {
+    executecmd("REINDEX TABLE lookup");
+  }
+
+  @SneakyThrows
+  private void executecmd(String query) {
+    try (var statement =
+      database.prepareStatement(query)) {
+      statement.execute();
     }
   }
 
@@ -99,4 +108,5 @@ public class PostgresRunner extends BenchmarkBaseline<Connection> {
     statement.setString(6, objectMapper.writeValueAsString(lookup.identifiers));
     statement.addBatch();
   }
+
 }
