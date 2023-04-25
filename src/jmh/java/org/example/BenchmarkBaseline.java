@@ -47,8 +47,7 @@ public abstract class BenchmarkBaseline<T extends AutoCloseable> extends Databas
 
   protected T database;
 
-//  @Param({"50", "1000", "5000", "10000", "50000", "100000", "250000", "500000", "1000000", "5000000", "10000000"})
-   @Param({"500000", "1000000", "5000000", "10000000"})
+  @Param({"50", "1000", "5000", "10000", "50000", "100000", "250000", "500000", "1000000", "5000000", "10000000"})
   public int documentCount;
 
   /**
