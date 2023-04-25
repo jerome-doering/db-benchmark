@@ -119,6 +119,7 @@ select pg_size_pretty(pg_relation_size('public.lookup')) as DB, pg_size_pretty(p
 - [x] Batch inserts
 - [x] Rebuild indexes before execution
 - [x] Multi-threaded inserts
+- [ ] Remove indexes, fill the DB, then create index to make the setup faster
 - [ ] Update mongo to version 4.2
 - [ ] Get the stats (fs-size and index-size) on every tear-down
 - [ ] Change read operation to read by user or profile-ID instead of check-ID 

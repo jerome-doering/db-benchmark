@@ -7,8 +7,6 @@ import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.stream.IntStream;
-import java.util.stream.Stream;
 import lombok.SneakyThrows;
 import org.openjdk.jmh.annotations.BenchmarkMode;
 import org.openjdk.jmh.annotations.Fork;
@@ -41,9 +39,9 @@ import org.slf4j.LoggerFactory;
 public abstract class BenchmarkBaseline<T extends AutoCloseable> extends DatabaseRecordsGenerator {
   private static final Logger LOG = LoggerFactory.getLogger(BenchmarkBaseline.class);
   private static final int BULK_SIZE = 1000;
-  private static final int THREADS_TO_FILL_DB = 4;
+  private static final int THREAD_NUMBER_TO_FILL_DB = Runtime.getRuntime().availableProcessors();;
   private final AtomicInteger numberOfInserts = new AtomicInteger(0);
-  BlockingQueue<List<Lookup>> unboundedQueue = new ArrayBlockingQueue<>(THREADS_TO_FILL_DB, true);
+  BlockingQueue<List<Lookup>> unboundedQueue = new ArrayBlockingQueue<>(THREAD_NUMBER_TO_FILL_DB, true);
 
   protected T database;
 
@@ -91,14 +89,13 @@ public abstract class BenchmarkBaseline<T extends AutoCloseable> extends Databas
   @SneakyThrows
   private void fillDatabase() {
     CompletableFuture<Void> producerThread = CompletableFuture.runAsync(this::generateLookups);
-    Stream<CompletableFuture<Void>> consumerThreads = IntStream.range(0, THREADS_TO_FILL_DB)
-      .boxed()
-      .map(cnt -> CompletableFuture.runAsync(this::pullAndInsert));
-
     @SuppressWarnings("unchecked")
-    CompletableFuture<Void>[] threads = Stream.concat(Stream.of(producerThread), consumerThreads)
-      .toArray(CompletableFuture[]::new);
-
+    CompletableFuture<Void>[] threads = new CompletableFuture[THREAD_NUMBER_TO_FILL_DB + 1];
+    threads[0] = producerThread;
+    // consumer threads
+    for (int i = 0; i < THREAD_NUMBER_TO_FILL_DB; ++i) {
+      threads[i + 1] = CompletableFuture.runAsync(this::pullAndInsert);
+    }
     CompletableFuture.allOf(threads).join();
   }
 

@@ -6,6 +6,7 @@ import com.mongodb.client.MongoClient;
 import com.mongodb.client.MongoClients;
 import com.mongodb.client.MongoCollection;
 import com.mongodb.client.MongoCursor;
+import com.mongodb.client.model.IndexOptions;
 import java.util.LinkedList;
 import java.util.List;
 import org.bson.Document;
@@ -70,9 +71,16 @@ public class MongoRunner extends BenchmarkBaseline<MongoClient> {
       }
     });
     indexes.stream()
+      .peek(System.out::println)
       .map(d -> d.getString("name"))
       .forEach(collection::dropIndex);
-    indexes.forEach(collection::createIndex);
+    indexes.stream()
+    .forEach(d -> {
+      var definition = d.get("key", Document.class);
+      var unique = d.getBoolean("unique", false);
+      IndexOptions options = new IndexOptions().name(d.getString("name")).unique(unique);
+      collection.createIndex(definition, options);
+    });
   }
 
   @Override
