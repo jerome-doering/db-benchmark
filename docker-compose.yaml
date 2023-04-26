@@ -10,7 +10,7 @@ services:
       MONGO_INITDB_DATABASE: benchmark
     ports: ["27017:27017"]
     volumes:
-      - mongodb:/data/db
+     # - mongodb:/data/db
       - ./mongo.init.js:/docker-entrypoint-initdb.d/init.js
 
   mariadb:
@@ -21,7 +21,7 @@ services:
     ports: ["3306:3306"]
     volumes:
       - ./init.sql:/docker-entrypoint-initdb.d/init.sql
-      - maria:/var/lib/mysql
+      #- maria:/var/lib/mysql
 
   postgres:
     image: postgres:13-alpine
@@ -31,7 +31,7 @@ services:
       POSTGRES_USER: benchmark
     ports: ["15432:5432"]
     volumes:
-      - pgsql:/var/lib/postgresql/data
+    #  - pgsql:/var/lib/postgresql/data
       - ./pgsql.init.sql:/docker-entrypoint-initdb.d/init.sql
 
 volumes:

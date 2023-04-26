@@ -4,7 +4,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import lombok.SneakyThrows;
@@ -38,11 +40,13 @@ import org.slf4j.LoggerFactory;
 @Fork(value = 1)
 public abstract class BenchmarkBaseline<T extends AutoCloseable> extends DatabaseRecordsGenerator {
   private static final Logger LOG = LoggerFactory.getLogger(BenchmarkBaseline.class);
-  private static final int BULK_SIZE = 1000;
-  private static final int THREAD_NUMBER_TO_FILL_DB = Runtime.getRuntime().availableProcessors();;
-  private final AtomicInteger numberOfInserts = new AtomicInteger(0);
-  BlockingQueue<List<Lookup>> unboundedQueue = new ArrayBlockingQueue<>(THREAD_NUMBER_TO_FILL_DB, true);
+  private static final int BULK_SIZE = 100;
+  private static final int THREAD_NUMBER_TO_FILL_DB = 4;
 
+  private final AtomicInteger numberOfInserts = new AtomicInteger(0);
+  private final BlockingQueue<List<Lookup>> unboundedQueue = new ArrayBlockingQueue<>(2 * THREAD_NUMBER_TO_FILL_DB, true);
+
+  private volatile boolean producerThreadRunning = false;
   protected T database;
 
   @Param({"50", "1000", "5000", "10000", "50000", "100000", "250000", "500000", "1000000", "5000000", "10000000"})
@@ -86,31 +90,53 @@ public abstract class BenchmarkBaseline<T extends AutoCloseable> extends Databas
     cleanupResources();
   }
 
+  /**
+   * Fills the database with exactly {@link #documentCount} elements that are generated according to {@link #generateRecord()}. This is done
+   * in a multi-threaded way:
+   * <ol>
+   * <li>One producer thread that generates the records and pushed them as batches with {@link #BULK_SIZE} to the blocking queue
+   * ({@link #unboundedQueue})</li>
+   * <li>{@link #THREAD_NUMBER_TO_FILL_DB} threads that that poll from the queue and insert the batches via
+   * {@link #insertDocuments(List)}</li>
+   * </ol>
+   *
+   * Since JMH doesn't allow dangling threads, the executor is shutdown on completion of those threads. An alternative would be to run
+   * threads in daemon mode. Check for completion is done via {@link #producerThreadRunning} and a {@link CountDownLatch}.
+   */
   @SneakyThrows
   private void fillDatabase() {
-    CompletableFuture<Void> producerThread = CompletableFuture.runAsync(this::generateLookups);
-    @SuppressWarnings("unchecked")
-    CompletableFuture<Void>[] threads = new CompletableFuture[THREAD_NUMBER_TO_FILL_DB + 1];
-    threads[0] = producerThread;
+    producerThreadRunning = true;
+    ExecutorService executor = Executors.newFixedThreadPool(THREAD_NUMBER_TO_FILL_DB + 1);
+    executor.execute(this::generateLookups); // producer thread
+    CountDownLatch latch = new CountDownLatch(THREAD_NUMBER_TO_FILL_DB);
     // consumer threads
     for (int i = 0; i < THREAD_NUMBER_TO_FILL_DB; ++i) {
-      threads[i + 1] = CompletableFuture.runAsync(this::pullAndInsert);
+      executor.execute(() -> {
+        pullAndInsert();
+        latch.countDown();
+      });
     }
-    CompletableFuture.allOf(threads).join();
+    latch.await();
+    executor.shutdown();
+    if (!executor.awaitTermination(1, TimeUnit.SECONDS)) {
+      LOG.error("Following threads are running [{}]", executor.shutdownNow());
+      throw new IllegalStateException();
+    }
   }
 
   @SneakyThrows
   private void pullAndInsert() {
     LOG.info("Consumer thread for db inserts started.....");
-    while (numberOfInserts.get() < documentCount - 1) {
-      List<Lookup> batch = unboundedQueue.poll(1, TimeUnit.SECONDS);
+    int progressNumber = Math.max(50, documentCount / 100);
+    List<Lookup> batch;
+    while ((batch = unboundedQueue.poll(2, TimeUnit.SECONDS)) != null || producerThreadRunning) {
       if (batch == null) {
         LOG.info("Waiting {}/{} .....", numberOfInserts.get(), documentCount);
         continue;
       }
       insertDocuments(batch);
-      int nrBeforeUpdate = numberOfInserts.getAndAdd(batch.size());
-      int progressNumber = Math.max(50, documentCount / 100);
+      int size = batch.size();
+      int nrBeforeUpdate = numberOfInserts.getAndUpdate(i -> i + size);
 
       // Could me made smarter
       for (int i = nrBeforeUpdate; i < nrBeforeUpdate + batch.size(); i++) {
@@ -138,6 +164,7 @@ public abstract class BenchmarkBaseline<T extends AutoCloseable> extends Databas
       unboundedQueue.put(records);
     }
     LOG.info("Producer thread for lookups finished.....");
+    producerThreadRunning = false;
   }
 
   private void cleanupResources() {

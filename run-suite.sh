@@ -26,11 +26,11 @@ echo '############\n'
 
 docker-compose up -d mariadb
 
-until [ $(docker-compose logs --tail='all' mariadb  | grep "ready for connections" | wc -l) -gt 0 ]; do
+until [ $(docker-compose logs --tail='all' mariadb  | grep "ready for connections" | wc -l) -gt 1 ]; do
 	printf '.'
     sleep 1
 done
-sleep 4
+
 java -jar build/libs/db-benchmark-1.0-SNAPSHOT-jmh.jar MariaRunner  -rff "build/maria.csv" -o "build/maria.txt"
 
 docker-compose down
