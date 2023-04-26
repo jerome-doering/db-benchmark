@@ -136,8 +136,47 @@ Query:
 ```
 select pg_size_pretty(pg_relation_size('public.lookup')) as DB, pg_size_pretty(pg_indexes_size('public.lookup')) as idx;
 ```
+# Mongo improvements
+The way we store the PK/_id seems inefficient. Since this is done throughout the whole benchmark it affects all the suites in the same way. A small analysis for alternatives:
 
-# Improvements
+## Big String
+
+```javascript
+_id = "common_rules_executor_-=-_1233433_-=-_CALCULATION_REQUEST"
+```
+
+  key             | value
+  ----------------| --------:
+  storage         | 821MB
+  index           | 1.118GB
+
+## Short string
+
+```javascript
+_id = "cre=14323=CR"
+```
+
+  key             | value
+  ----------------| -------:
+  storage         | 748MB
+  index           | 332MB
+
+## Composite key
+
+```javascript
+_id = {
+    "i": 1324324,
+    "c": "cre",
+    "t": "cr"
+}
+```
+
+  key             | value
+  ----------------| -------:
+  storage         | 748MB
+  index           | 639MB
+
+# Tods
 - [x] Batch inserts
 - [x] Rebuild indexes before execution
 - [x] Multi-threaded inserts
