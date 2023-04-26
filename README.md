@@ -12,7 +12,9 @@
 - **All benchmark executions are single threaded!**
 
 # Accuracy
-Especially with smaller databases there is the risk that the same record is being fetched multiple times due to the randomness of the records to be fetched. This could lead to a utilising the DB which then affects the times. However, having 1 minute of testing, I hope that this evens out.
+Especially with smaller databases there is the risk that the same record is being fetched multiple times due to the randomness of the records to be fetched. This could lead to a utilising the DB-cache which then affects the times. However, having 1 minute of testing, I hope that this evens out.\
+Note1: Inserting (setup) is done in a multi-threaded way but the actual benchmark is not. \
+Note2: The docker images are the default images (no setting/connection tuning)
 
 # Usage
 - `./gradlew jmh` to run the suite
@@ -30,28 +32,35 @@ Comment out the `docker-compose down` in the script leaves the data-bases runnin
 As of writing this I got the following results
 
 ## Mongo
-| Benchmark                  | (documentCount) | Mode | Cnt | Score  | Error | Units |
-|----------------------------|----------------:|------|-----|--------|-------|-------|
-| MongoRunner.benchmarkRead  |              50 | avgt |     | 0.225  |       | ms/op |
-| MongoRunner.benchmarkRead  |            1000 | avgt |     | 0.148  |       | ms/op |
-| MongoRunner.benchmarkRead  |            5000 | avgt |     | 0.145  |       | ms/op |
-| MongoRunner.benchmarkRead  |           10000 | avgt |     | 0.145  |       | ms/op |
-| MongoRunner.benchmarkRead  |           50000 | avgt |     | 0.147  |       | ms/op |
-| MongoRunner.benchmarkRead  |          100000 | avgt |     | 0.148  |       | ms/op |
-| MongoRunner.benchmarkRead  |          250000 | avgt |     | 0.149  |       | ms/op |
-| MongoRunner.benchmarkRead  |          500000 | avgt |     | 0.144  |       | ms/op |
-| MongoRunner.benchmarkRead  |         1000000 | avgt |     | 0.149  |       | ms/op |
 
-DB size:
-- Lookup
-  - Count: 1\_000\_000
-  - Size: 82MB
-  - Index-size:
-    - id: 67MB
-    - lookup_values: 76MB
-    - archivalId_1: 13MB
-  - total-size: 239MB
-- Query:
+### Times
+
+| Benchmark                  | (documentCount) | Mode | Cnt | Score  | Error | Units |
+|----------------------------|----------------:|------|-----|-------:|-------|-------|
+| MongoRunner.benchmarkRead  |              50 | avgt |     | 0.225  |       | ms/op |
+| MongoRunner.benchmarkRead  |           1,000 | avgt |     | 0.148  |       | ms/op |
+| MongoRunner.benchmarkRead  |           5,000 | avgt |     | 0.145  |       | ms/op |
+| MongoRunner.benchmarkRead  |          10,000 | avgt |     | 0.145  |       | ms/op |
+| MongoRunner.benchmarkRead  |          50,000 | avgt |     | 0.147  |       | ms/op |
+| MongoRunner.benchmarkRead  |         100,000 | avgt |     | 0.148  |       | ms/op |
+| MongoRunner.benchmarkRead  |         250,000 | avgt |     | 0.149  |       | ms/op |
+| MongoRunner.benchmarkRead  |         500,000 | avgt |     | 0.144  |       | ms/op |
+| MongoRunner.benchmarkRead  |       1,000,000 | avgt |     | 0.149  |       | ms/op |
+| MongoRunner.benchmarkRead  |       5,000,000 | avgt |     | 0.150  |       | ms/op |
+| MongoRunner.benchmarkRead  |      10,000,000 | avgt |     | 0.188  |       | ms/op |
+
+### Stats
+
+Lookup collection
+- Count: 10,000,000
+- Storage: 821MB
+- Index:
+  - id: 1,118GB
+  - lookup_values: 399MB
+  - archivalId_1: 130MB
+- Total: 2.233GB
+
+Query:
 ```
 // Normal count does not work and other count methods have been added starting mongo 4.2
 db.lookup.aggregate( [
@@ -61,30 +70,37 @@ db.lookup.stats();
 ```
 
 ## Mariadb
-Query times are crap, could someone please check if my query is correct? See `MariaRunner.MariaReadState#setup()`
-| Benchmark                   | (documentCount) | Mode | Cnt |    Score |  Error | Units
-|-----------------------------|----------------:|------|-----|----------|--------|------
-| MariaRunner.benchmarkRead   |              50 | avgt |     |    0.176 |        | ms/op
-| MariaRunner.benchmarkRead   |            1000 | avgt |     |    1.319 |        | ms/op
-| MariaRunner.benchmarkRead   |            5000 | avgt |     |    5.621 |        | ms/op
-| MariaRunner.benchmarkRead   |           10000 | avgt |     |   11.171 |        | ms/op
-| MariaRunner.benchmarkRead   |           50000 | avgt |     |   54.530 |        | ms/op
-| MariaRunner.benchmarkRead   |          100000 | avgt |     |  109.005 |        | ms/op
-| MariaRunner.benchmarkRead   |          250000 | avgt |     |  737.265 |        | ms/op
-| MariaRunner.benchmarkRead   |          500000 | avgt |     | 1474.179 |        | ms/op
-| MariaRunner.benchmarkRead   |         1000000 | avgt |     | 2909.673 |        | ms/op
+Query times are crap, could someone please check if my query is correct? See `MariaRunner.MariaReadState#setup()`. According to `EXPLAIN` the indexes are being used.
 
-DB size:
+### Times
+| Benchmark                   | (documentCount) | Mode | Cnt |     Score |  Error | Units
+|-----------------------------|----------------:|------|-----|----------:|--------|------
+| MariaRunner.benchmarkRead   |              50 | avgt |     |     0.213 |        | ms/op
+| MariaRunner.benchmarkRead   |           1,000 | avgt |     |     1.556 |        | ms/op
+| MariaRunner.benchmarkRead   |           5,000 | avgt |     |     6.992 |        | ms/op
+| MariaRunner.benchmarkRead   |          10,000 | avgt |     |    13.713 |        | ms/op
+| MariaRunner.benchmarkRead   |          50,000 | avgt |     |    64.100 |        | ms/op
+| MariaRunner.benchmarkRead   |         100,000 | avgt |     |   130.139 |        | ms/op
+| MariaRunner.benchmarkRead   |         250,000 | avgt |     |   747.654 |        | ms/op
+| MariaRunner.benchmarkRead   |         500,000 | avgt |     |  1910.946 |        | ms/op
+| MariaRunner.benchmarkRead   |       1,000,000 | avgt |     |  4155.642 |        | ms/op
+| MariaRunner.benchmarkRead   |       5,000,000 | avgt |     | 26395.945 |        | ms/op
+| MariaRunner.benchmarkRead   |      10,000,000 | avgt |     | 46966.719 |        | ms/op
+
+
+
+### Stats
 - Lookup
-  - Count: 981\_775 - `count(*)` returns 1e6
-  - Size: 188MB
-  - Index-size: 74MB
+  - Count: 9,930,236 - `count(*)` returns 1e7
+  - Storage: 1.331GB
+  - Index: 841MB
 - Lookup_identifiers
-  - Count: 434\_028\_544
-  - Size: 434MB
-  - Index-size: 176MB
-- total size: 833MB
-- Query:
+  - Count: 39,720,605 - `count(*)` returns 39,990,665
+  - Storage: 4.949GB
+  - Index: 1.303GB
+- Total: 8.034GB
+
+Query:
 ```
 ANALYZE TABLE lookup;
 ANALYZE TABLE lookup_identifier ;
@@ -93,24 +109,30 @@ show table status from test;
 ```
 
 ## Postgres
-| Benchmark                    | (documentCount) | Mode | Cnt |     Score |  Error | Units
-|------------------------------|----------------:|------|-----|-----------|--------|------
-| PostgresRunner.benchmarkRead |              50 | avgt |     |   0.060   |        | ms/op
-| PostgresRunner.benchmarkRead |            1000 | avgt |     |   0.288   |        | ms/op
-| PostgresRunner.benchmarkRead |            5000 | avgt |     |   1.206   |        | ms/op
-| PostgresRunner.benchmarkRead |           10000 | avgt |     |   2.258   |        | ms/op
-| PostgresRunner.benchmarkRead |           50000 | avgt |     |  11.149   |        | ms/op
-| PostgresRunner.benchmarkRead |          100000 | avgt |     |  22.303   |        | ms/op
-| PostgresRunner.benchmarkRead |          250000 | avgt |     |  34.321   |        | ms/op
-| PostgresRunner.benchmarkRead |          500000 | avgt |     |  65.888   |        | ms/op
-| PostgresRunner.benchmarkRead |         1000000 | avgt |     | 142.569   |        | ms/op
+### Times
 
-DB size:
-- Lookup
-  - Count: 1\_000\_0
-  - Size: 214MB
-  - Index-size: 215MB
-- Query:
+| Benchmark                    | (documentCount) | Mode | Cnt |     Score |  Error | Units
+|------------------------------|----------------:|------|-----|----------:|--------|------
+| PostgresRunner.benchmarkRead |              50 | avgt |     |   0.112   |        | ms/op
+| PostgresRunner.benchmarkRead |           1,000 | avgt |     |   0.080   |        | ms/op
+| PostgresRunner.benchmarkRead |           5,000 | avgt |     |   0.199   |        | ms/op
+| PostgresRunner.benchmarkRead |          10,000 | avgt |     |   0.238   |        | ms/op
+| PostgresRunner.benchmarkRead |          50,000 | avgt |     |   0.270   |        | ms/op
+| PostgresRunner.benchmarkRead |         100,000 | avgt |     |   0.258   |        | ms/op
+| PostgresRunner.benchmarkRead |         250,000 | avgt |     |   0.272   |        | ms/op
+| PostgresRunner.benchmarkRead |         500,000 | avgt |     |   0.286   |        | ms/op
+| PostgresRunner.benchmarkRead |       1,000,000 | avgt |     |   0.266   |        | ms/op
+| PostgresRunner.benchmarkRead |       5,000,000 | avgt |     |   0.297   |        | ms/op
+| PostgresRunner.benchmarkRead |      10,000,000 | avgt |     |   0.256   |        | ms/op
+
+### Stats
+Lookup
+- Count: 10,000,000
+- Storage: 2.136GB
+- Index: 1.685GB
+- Total: 3.821GB
+
+Query:
 ```
 select pg_size_pretty(pg_relation_size('public.lookup')) as DB, pg_size_pretty(pg_indexes_size('public.lookup')) as idx;
 ```
